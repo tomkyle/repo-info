@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+#
+
+# =============================================
+# Runtime Environment
+# =============================================
+set -o errexit
+set -o nounset
+set -o pipefail
+# set -o xtrace
+
+
+function exit_err {
+	echo >&2 "${@}"; exit 1;
+}
+
+function require  {
+	command -v $1 >/dev/null 2>&1 || exit_err "repo-info requires ${1} but it's not installed";
+}
+
+function trim_pbcopy() {
+    echo -n "$@" | pbcopy
+}
+
+# =============================================
+# Requirements
+# =============================================
+require wget
+require pbcopy
+require shasum
+
+# =============================================
+# Check parameters
+# =============================================
+if [[ $# -eq 0 ]];  then exit_err "Usage: repo-info <vendor/project> [version]"; fi
+
+
+
+# Where wget should store downloads in
+TEMP_DIR=$( mktemp -d )
+
+# GitHub vendor/repo pair, from first parameter
+REPO="${1}"
+
+# Repo version tag, from second parameter
+VERSION_DEFAULT="master"
+VERSION="${2:-${VERSION_DEFAULT}}"
+
+
+# =============================================
+# Build URL
+# =============================================
+
+# also possible: GitHub v3 API
+# TARBALL_URL="https://api.github.com/repos/${REPO}/tarball/${VERSION}"
+
+# What "brew audit" likes
+TARBALL_FILE="${VERSION}.tar.gz"
+REPO_URL="https://github.com/${REPO}"
+TARBALL_URL="https://github.com/${REPO}/archive/${TARBALL_FILE}"
+
+
+# =============================================
+# Do business
+# =============================================
+
+if ! wget -o /dev/null --directory-prefix "${TEMP_DIR}" "${TARBALL_URL}"; then
+    exit_err "Error: '${REPO}' '${VERSION}' not available. Check vendor/repo or try another version."
+fi
+
+
+CHECKSUM=`shasum -a 256 "${TEMP_DIR}/${TARBALL_FILE}" | awk '{ print $1 }'`
+
+# Output checksum
+echo "Repo:      ${REPO} <${REPO_URL}>"
+echo "Version:   ${VERSION}"
+echo "Tarball:   ${TARBALL_URL}"
+echo "SHA-256:   ${CHECKSUM}"
+echo;
+
+trim_pbcopy ${CHECKSUM} && echo "The SHA-256 was copied to your clipboard. Use Cmd/Strg-V to paste somewhere."
+
+
+# Cleanup
+rm -Rf "${TEMP_DIR}"
+
+exit 0;
